@@ -16,6 +16,9 @@ class PlateResult:
     preprocessing: Any = None
     enhancement: Any = None
     segmentation: Any = None
+    
+    text: str = ""
+    text_confidence: float = 0.0
 
     features: dict = field(default_factory=dict)
 
@@ -27,6 +30,7 @@ class PipelineResult:
     """
 
     image: Any = None
+    watermarked: Any = None
 
     plates: list[PlateResult] = field(
         default_factory=list

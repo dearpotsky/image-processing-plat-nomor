@@ -13,7 +13,19 @@ class DetectorConfig:
     )
 
     confidence: float = 0.25
+    padding_v: float = 0.12
+    padding_left: float = 0.25
+    padding_right: float = 0.20
 
+# ============================================================
+# OCR
+# ============================================================
+
+@dataclass
+class OcrConfig:
+    text_threshold: float = 0.6
+    low_text: float = 0.3
+    mag_ratio: float = 1.2
 
 # ============================================================
 # PREPROCESSING
@@ -26,7 +38,7 @@ class PreprocessingConfig:
     target_width: int = 400
     target_height: int = 120
 
-    interpolation: str = "INTER_AREA"
+    interpolation: str = "INTER_CUBIC"
 
     grayscale: bool = True
     normalize: bool = True
@@ -44,12 +56,9 @@ class PreprocessingConfig:
 # ============================================================
 
 @dataclass
-class EnhancementConfig:
-    enabled: bool = True
-
-    method: str = "clahe"
-
-    clip_limit: float = 2.0
+class EnhancementStep:
+    method: str
+    limit: float = 0.0
     tile_grid_width: int = 8
     tile_grid_height: int = 8
 
@@ -60,16 +69,31 @@ class EnhancementConfig:
             self.tile_grid_height,
         )
 
+@dataclass
+class EnhancementConfig:
+    enabled: bool = True
+
+    steps: list[EnhancementStep] = field(
+        default_factory=list
+    )
+
 
 # ============================================================
 # SEGMENTATION
 # ============================================================
 
 @dataclass
+class SegmentationStep:
+    method: str
+    limit: float = 0.0
+
+@dataclass
 class SegmentationConfig:
     enabled: bool = True
 
-    method: str = "otsu"
+    steps: list[SegmentationStep] = field(
+        default_factory=list
+    )
 
     # Adaptive threshold
     block_size: int = 11
@@ -95,6 +119,14 @@ class FeatureConfig:
 
 
 # ============================================================
+# WATERMARK
+# ============================================================
+
+@dataclass
+class WatermarkConfig:
+    enabled: bool = False
+
+# ============================================================
 # OUTPUT
 # ============================================================
 
@@ -107,6 +139,7 @@ class OutputConfig:
     save_enhancement: bool = True
     save_segmentation: bool = True
     save_features: bool = True
+    save_watermark: bool = True
 
     save_csv: bool = True
 
@@ -132,6 +165,10 @@ class PipelineConfig:
     detector: DetectorConfig = field(
         default_factory=DetectorConfig
     )
+    
+    ocr: OcrConfig = field(
+        default_factory=OcrConfig
+    )
 
     preprocessing: PreprocessingConfig = field(
         default_factory=PreprocessingConfig
@@ -147,6 +184,10 @@ class PipelineConfig:
 
     feature: FeatureConfig = field(
         default_factory=FeatureConfig
+    )
+
+    watermark: WatermarkConfig = field(
+        default_factory=WatermarkConfig
     )
 
     output: OutputConfig = field(

@@ -1,6 +1,5 @@
 import cv2
 
-
 class Preprocessor:
 
     def __init__(
@@ -8,7 +7,7 @@ class Preprocessor:
         target_size=(400, 120),
         grayscale=True,
         normalize=True,
-        interpolation="INTER_AREA",
+        interpolation="INTER_CUBIC",  # Diubah ke INTER_CUBIC agar teks scale-up tidak pecah
     ):
         self.target_size = target_size
         self.use_grayscale = grayscale
@@ -16,31 +15,42 @@ class Preprocessor:
         self.interpolation = interpolation
 
     def resize(self, image):
-
         interpolation_method = getattr(
             cv2,
             self.interpolation,
-            cv2.INTER_AREA,
+            cv2.INTER_CUBIC,
         )
-
+        
+        # Pertahankan aspect ratio berdasarkan height agar karakter tidak melar/distorsi
+        target_h = self.target_size[1]
+        h, w = image.shape[:2]
+        
+        if h == 0:
+            return image
+            
+        ratio = target_h / float(h)
+        target_w = int(w * ratio)
+        
+        # Batasi lebar maksimal jika terlalu ekstrem (misalnya lebih dari 800px)
+        # agar tidak merusak EasyOCR
+        if target_w > 800:
+            target_w = 800
+            
         return cv2.resize(
             image,
-            self.target_size,
+            (target_w, target_h),
             interpolation=interpolation_method,
         )
 
     def grayscale(self, image):
-
         if len(image.shape) == 2:
             return image
-
         return cv2.cvtColor(
             image,
             cv2.COLOR_BGR2GRAY,
         )
 
     def normalize(self, image):
-
         return cv2.normalize(
             image,
             None,
@@ -50,7 +60,6 @@ class Preprocessor:
         )
 
     def process(self, image):
-
         result = self.resize(image)
 
         if self.use_grayscale:

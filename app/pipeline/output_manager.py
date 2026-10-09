@@ -88,6 +88,19 @@ class OutputManager:
                 / f"plate_{index:02d}_segmented.jpg",
             )
 
+        if result.watermarked is not None:
+            self._save_image(
+                result.watermarked,
+                output_dir / f"{image_stem}_watermarked.jpg"
+            )
+            
+        # Simpan original image untuk perbandingan Before-After di UI
+        if result.image is not None:
+            self._save_image(
+                result.image,
+                output_dir / f"{image_stem}_original.jpg"
+            )
+
         self._save_features(
             result,
             directories["feature"]
@@ -127,7 +140,7 @@ class OutputManager:
 
     def list_images(self, result_name):
         """
-        Mengembalikan daftar image dalam sebuah experiment (termasuk tiap plat).
+        Mengembalikan daftar image dalam sebuah experiment (termasuk tiap plat dan tiap tahapan).
         """
 
         result_dir = self.base_dir / result_name
@@ -140,23 +153,36 @@ class OutputManager:
         for path in sorted(result_dir.iterdir()):
             if not path.is_dir():
                 continue
+                
+            has_image = False
 
-            detection_dir = path / "00_detection"
-            found_plates = False
+            # Check for watermarked image
+            watermarked_path = path / f"{path.name}_watermarked.jpg"
+            if watermarked_path.exists():
+                images.append(
+                    {
+                        "name": f"{path.name} - Full (Watermarked)",
+                        "path": path,
+                    }
+                )
+                has_image = True
             
-            if detection_dir.exists():
-                plates = sorted(detection_dir.glob("*.jpg"))
-                if plates:
-                    found_plates = True
+            # Loop through all stages
+            stages = ["00_detection", "01_preprocessing", "02_enhancement", "03_segmentation"]
+            for stage in stages:
+                stage_dir = path / stage
+                if stage_dir.exists():
+                    plates = sorted(stage_dir.glob("*.jpg"))
                     for plate_path in plates:
                         images.append(
                             {
-                                "name": f"{path.name} - {plate_path.stem}",
+                                "name": f"{path.name} - {stage[3:]} - {plate_path.stem}",
                                 "path": path,
                             }
                         )
+                        has_image = True
                         
-            if not found_plates:
+            if not has_image:
                 images.append(
                     {
                         "name": path.name,

@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 
 from app.detection.plate_detector import (
     PlateDetector,
@@ -6,6 +7,10 @@ from app.detection.plate_detector import (
 
 from app.detection.plate_cropper import (
     PlateCropper,
+)
+
+from app.detection.ocr import (
+    PlateReader,
 )
 
 from app.processing.preprocessing import (
@@ -74,19 +79,17 @@ class ImageProcessingPipeline:
         )
 
         self.detector = PlateDetector(
-            model_path=(
-                detector_config.model_path
-            ),
-            confidence=(
-                detector_config.confidence
-            ),
+            config=self.config.detector
         )
 
         # ------------------------------------------------
-        # Crop
+        # Crop & OCR
         # ------------------------------------------------
 
         self.cropper = PlateCropper()
+        self.reader = PlateReader(
+            config=self.config.ocr
+        )
 
         # ------------------------------------------------
         # Preprocessing
@@ -143,7 +146,9 @@ class ImageProcessingPipeline:
         )
 
     def run(self, image):
-
+        logger = logging.getLogger('pipeline')
+        logger.info("Memulai proses...")
+        
         if image is None:
             raise ValueError(
                 "Image tidak boleh None."
@@ -157,9 +162,18 @@ class ImageProcessingPipeline:
         # DETECTION
         # =================================================
 
+        logger = logging.getLogger('pipeline')
+        logger.info("-------------------------------------------------")
+        logger.info("Tahap 1: Deteksi Area Plat Nomor menggunakan YOLO")
+        
         detections = (
             self.detector.detect(image)
         )
+
+        if not detections:
+            logger.info("-> YOLO gagal mendeteksi adanya plat pada gambar.")
+        else:
+            logger.info(f"-> YOLO menemukan {len(detections)} plat.")
 
         # =================================================
         # PROCESS EACH PLATE
@@ -179,6 +193,7 @@ class ImageProcessingPipeline:
             # Crop
             # ---------------------------------------------
 
+            logger.info(f"Plat {index}: Melakukan pemotongan (cropping) gambar pada area deteksi...")
             crop = self.cropper.crop(
                 image,
                 box,
@@ -193,7 +208,7 @@ class ImageProcessingPipeline:
             )
 
             if preprocessing_config.enabled:
-
+                logger.info(f"Plat {index}: Tahap 2: Preprocessing (Grayscale, Resize, Normalization)...")
                 preprocessed = (
                     self.preprocessor.process(
                         crop
@@ -201,7 +216,7 @@ class ImageProcessingPipeline:
                 )
 
             else:
-
+                logger.info(f"Plat {index}: Tahap 2: Preprocessing diabaikan.")
                 preprocessed = crop
 
             # ---------------------------------------------
@@ -212,20 +227,16 @@ class ImageProcessingPipeline:
                 self.config.enhancement
             )
 
-            if enhancement_config.enabled:
-
+            if enhancement_config.enabled and enhancement_config.steps:
+                logger.info(f"Plat {index}: Tahap 3: Enhancement dengan {len(enhancement_config.steps)} langkah berseri")
+                for i, step in enumerate(enhancement_config.steps, 1):
+                    logger.info(f"  -> [Enhancement {i}] Memproses {step.method} (limit={step.limit})")
+                
                 enhanced = (
                     self.enhancer.enhance(
                         preprocessed,
-                        method=(
-                            enhancement_config.method
-                        ),
-                        clip_limit=(
-                            enhancement_config.clip_limit
-                        ),
-                        tile_grid_size=(
-                            enhancement_config
-                            .tile_grid_size
+                        steps=(
+                            enhancement_config.steps
                         ),
                     )
                 )
@@ -233,6 +244,8 @@ class ImageProcessingPipeline:
             else:
 
                 enhanced = preprocessed
+
+
 
             # ---------------------------------------------
             # Segmentation
@@ -242,14 +255,17 @@ class ImageProcessingPipeline:
                 self.config.segmentation
             )
 
-            if segmentation_config.enabled:
+            if segmentation_config.enabled and segmentation_config.steps:
+                logger.info(f"Plat {index}: Tahap 4: Segmentasi (binarisasi) dengan {len(segmentation_config.steps)} langkah berseri")
+                for i, step in enumerate(segmentation_config.steps, 1):
+                    logger.info(f"  -> [Segmentation {i}] Memproses {step.method} (limit={step.limit})")
 
                 threshold, segmented = (
                     self.segmenter.segment(
                         enhanced,
-                        method=(
+                        steps=(
                             segmentation_config
-                            .method
+                            .steps
                         ),
                         block_size=(
                             segmentation_config
@@ -270,6 +286,19 @@ class ImageProcessingPipeline:
                 segmented = enhanced
 
             # ---------------------------------------------
+            # OCR
+            # ---------------------------------------------
+            
+            logger.info(f"Plat {index}: Tahap 5: Ekstraksi Teks (OCR) menggunakan EasyOCR...")
+            # Secara default, jika segmentasi aktif (seperti Otsu + Clear Border),
+            # OCR akan membaca gambar biner hasil akhir. Jika tidak, membaca gambar enhanced.
+            plate_text, text_prob = self.reader.read_text(segmented)
+            if plate_text:
+                logger.info(f"Plat {index}: -> Teks plat terbaca: '{plate_text}' (Kepercayaan: {text_prob:.2f})")
+            else:
+                logger.info(f"Plat {index}: -> Gagal membaca teks plat (OCR kosong).")
+
+            # ---------------------------------------------
             # Feature Analysis
             # ---------------------------------------------
 
@@ -277,8 +306,8 @@ class ImageProcessingPipeline:
                 self.config.feature
             )
 
-            if feature_config.enabled:
-
+            if feature_config.enabled and segmented is not None:
+                logger.info(f"Plat {index}: Tahap 6: Analisis Fitur Gambar Biner (menghitung luas objek, dll)...")
                 features = (
                     self.feature_analyzer.analyze(
                         segmented
@@ -309,11 +338,65 @@ class ImageProcessingPipeline:
                 preprocessing=preprocessed,
                 enhancement=enhanced,
                 segmentation=segmented,
+                text=plate_text,
+                text_confidence=text_prob,
                 features=features,
             )
 
             result.add_plate(
                 plate_result
             )
+
+        # =================================================
+        # WATERMARKING
+        # =================================================
+
+        watermark_config = self.config.watermark
+        if watermark_config.enabled and detections:
+            logger.info("Tahap 7: Memberikan Watermarking (Kotak & Teks OCR) pada citra awal...")
+            import cv2
+            watermarked = image.copy()
+            for index, detection in enumerate(detections, start=1):
+                x1, y1, x2, y2 = [int(v) for v in detection["box"]]
+                confidence = detection["confidence"]
+                
+                # Draw green border
+                cv2.rectangle(
+                    watermarked, 
+                    (x1, y1), 
+                    (x2, y2), 
+                    (0, 255, 0), 
+                    2
+                )
+                
+                # Use OCR Text if available
+                plate_res = result.plates[index-1]
+                if plate_res.text:
+                    text = f"{plate_res.text} ({plate_res.text_confidence:.2f})"
+                else:
+                    text = f"Plat {index} ({confidence:.2f})"
+                
+                # Text background
+                (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+                cv2.rectangle(
+                    watermarked, 
+                    (x1, y1 - 25), 
+                    (x1 + tw, y1), 
+                    (0, 255, 0), 
+                    -1
+                )
+                
+                # Text
+                cv2.putText(
+                    watermarked, 
+                    text, 
+                    (x1, y1 - 5), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 
+                    0.6, 
+                    (0, 0, 0), 
+                    2
+                )
+                
+            result.watermarked = watermarked
 
         return result

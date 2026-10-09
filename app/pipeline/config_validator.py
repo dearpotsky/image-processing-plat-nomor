@@ -17,13 +17,32 @@ class ConfigValidator:
 
     VALID_ENHANCEMENT_METHODS = {
         "none",
+        "contrast_stretching",
+        "histogram_equalization",
+        "lpf",
+        "hpf",
+        "retinex",
         "clahe",
+        "gamma_correction",
+        "unsharp_masking",
+        "morphology_open",
     }
 
     VALID_SEGMENTATION_METHODS = {
         "none",
-        "otsu",
+        "global",
         "adaptive",
+        "otsu",
+        "sobel",
+        "canny",
+        "prewitt",
+        "region_growing",
+        "region_split_merge",
+        "kmeans",
+        "fuzzy_cmeans",
+        "watershed",
+        "active_contour",
+        "clear_border",
     }
 
     def validate(self, config: PipelineConfig):
@@ -31,6 +50,12 @@ class ConfigValidator:
 
         errors.extend(
             self._validate_detector(
+                config
+            )
+        )
+
+        errors.extend(
+            self._validate_ocr(
                 config
             )
         )
@@ -89,16 +114,37 @@ class ConfigValidator:
                 "tidak boleh kosong."
             )
 
-        if not (
-            0.0
-            <= detector.confidence
-            <= 1.0
-        ):
-            errors.append(
-                "detector.confidence "
-                "harus berada pada 0.0 sampai 1.0."
-            )
+        if not (0.0 <= detector.confidence <= 1.0):
+            errors.append("detector.confidence harus berada pada 0.0 sampai 1.0.")
+            
+        if not (0.0 <= detector.padding_v <= 1.0):
+            errors.append("detector.padding_v harus berada pada 0.0 sampai 1.0.")
+            
+        if not (0.0 <= detector.padding_left <= 1.0):
+            errors.append("detector.padding_left harus berada pada 0.0 sampai 1.0.")
+            
+        if not (0.0 <= detector.padding_right <= 1.0):
+            errors.append("detector.padding_right harus berada pada 0.0 sampai 1.0.")
 
+        return errors
+
+    # ======================================================
+    # OCR
+    # ======================================================
+    
+    def _validate_ocr(self, config):
+        errors = []
+        ocr = config.ocr
+        
+        if not (0.0 <= ocr.text_threshold <= 1.0):
+            errors.append("ocr.text_threshold harus berada pada 0.0 sampai 1.0.")
+            
+        if not (0.0 <= ocr.low_text <= 1.0):
+            errors.append("ocr.low_text harus berada pada 0.0 sampai 1.0.")
+            
+        if ocr.mag_ratio <= 0.0:
+            errors.append("ocr.mag_ratio harus > 0.0.")
+            
         return errors
 
     # ======================================================
@@ -159,39 +205,38 @@ class ConfigValidator:
             config.enhancement
         )
 
-        if (
-            enhancement.method
-            not in self.VALID_ENHANCEMENT_METHODS
-        ):
-            errors.append(
-                "enhancement.method "
-                f"tidak dikenal: "
-                f"{enhancement.method}"
-            )
+        if not enhancement.steps:
+            pass # Kosong berarti tidak ada enhancement
+        else:
+            for i, step in enumerate(enhancement.steps):
+                if step.method not in self.VALID_ENHANCEMENT_METHODS:
+                    errors.append(
+                        f"enhancement.steps[{i}] memiliki nilai tidak dikenal: {step.method}"
+                    )
 
-        if enhancement.clip_limit <= 0:
-            errors.append(
-                "enhancement.clip_limit "
-                "harus > 0."
-            )
+                if step.limit < 0:
+                    errors.append(
+                        f"enhancement.steps[{i}].limit "
+                        "harus >= 0."
+                    )
 
-        if (
-            enhancement.tile_grid_width
-            <= 0
-        ):
-            errors.append(
-                "enhancement.tile_grid_width "
-                "harus > 0."
-            )
+                if (
+                    step.tile_grid_width
+                    <= 0
+                ):
+                    errors.append(
+                        f"enhancement.steps[{i}].tile_grid_width "
+                        "harus > 0."
+                    )
 
-        if (
-            enhancement.tile_grid_height
-            <= 0
-        ):
-            errors.append(
-                "enhancement.tile_grid_height "
-                "harus > 0."
-            )
+                if (
+                    step.tile_grid_height
+                    <= 0
+                ):
+                    errors.append(
+                        f"enhancement.steps[{i}].tile_grid_height "
+                        "harus > 0."
+                    )
 
         return errors
 
@@ -209,36 +254,25 @@ class ConfigValidator:
             config.segmentation
         )
 
-        if (
-            segmentation.method
-            not in self.VALID_SEGMENTATION_METHODS
-        ):
-            errors.append(
-                "segmentation.method "
-                f"tidak dikenal: "
-                f"{segmentation.method}"
-            )
+        if not segmentation.steps:
+            pass # Kosong berarti tidak ada segmentation
+        else:
+            for i, step in enumerate(segmentation.steps):
+                if step.method not in self.VALID_SEGMENTATION_METHODS:
+                    errors.append(
+                        f"segmentation.steps[{i}] memiliki nilai tidak dikenal: {step.method}"
+                    )
 
-        if segmentation.method == "adaptive":
+                if step.limit < 0:
+                    errors.append(
+                        f"segmentation.steps[{i}].limit harus >= 0."
+                    )
 
-            if (
-                segmentation.block_size
-                <= 1
-            ):
-                errors.append(
-                    "segmentation.block_size "
-                    "harus > 1."
-                )
-
-            elif (
-                segmentation.block_size
-                % 2
-                == 0
-            ):
-                errors.append(
-                    "segmentation.block_size "
-                    "harus bernilai ganjil."
-                )
+                if step.method == "adaptive":
+                    if segmentation.block_size <= 1:
+                        errors.append("segmentation.block_size harus > 1.")
+                    elif segmentation.block_size % 2 == 0:
+                        errors.append("segmentation.block_size harus bernilai ganjil.")
 
         return errors
 

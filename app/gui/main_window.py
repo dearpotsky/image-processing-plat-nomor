@@ -1,5 +1,20 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
+import logging
+
+class TextHandler(logging.Handler):
+    def __init__(self, text_widget):
+        super().__init__()
+        self.text_widget = text_widget
+        
+    def emit(self, record):
+        msg = self.format(record)
+        def append():
+            self.text_widget.configure(state='normal')
+            self.text_widget.insert(tk.END, msg + '\n')
+            self.text_widget.configure(state='disabled')
+            self.text_widget.yview(tk.END)
+        self.text_widget.after(0, append)
 
 from app.pipeline.experiment_service import (
     ExperimentService
@@ -68,7 +83,15 @@ class MainWindow:
     # =========================================================
 
     def _build_ui(self):
-
+        
+        # Style
+        style = ttk.Style()
+        if 'clam' in style.theme_names():
+            style.theme_use('clam')
+        style.configure(".", font=('Segoe UI', 10))
+        style.configure("TLabelframe.Label", font=('Segoe UI', 11, 'bold'), foreground='#2c3e50')
+        style.configure("TButton", font=('Segoe UI', 10, 'bold'), padding=6)
+        
         container = ttk.Frame(
             self.root,
             padding=10
@@ -80,7 +103,7 @@ class MainWindow:
         )
 
         # =====================================================
-        # LEFT PANEL
+        # TOP PANEL (Settings in one row)
         # =====================================================
 
         self.experiment_panel = (
@@ -91,40 +114,13 @@ class MainWindow:
         )
 
         self.experiment_panel.pack(
-            side="left",
-            fill="y",
-            padx=(0, 10)
+            side="top",
+            fill="x",
+            pady=(0, 10)
         )
 
         # =====================================================
-        # RIGHT PANEL
-        # =====================================================
-
-        right = ttk.Frame(
-            container
-        )
-
-        right.pack(
-            side="left",
-            fill="both",
-            expand=True
-        )
-
-        self.result_panel = (
-            ResultPanel(
-                right,
-                service=self.service,
-                on_preview=self._preview
-            )
-        )
-
-        self.result_panel.pack(
-            fill="both",
-            expand=True
-        )
-
-        # =====================================================
-        # STATUS
+        # STATUS (Pinned to Bottom)
         # =====================================================
 
         self.status_var = tk.StringVar(
@@ -132,14 +128,90 @@ class MainWindow:
         )
 
         ttk.Label(
-            right,
+            container,
             textvariable=self.status_var,
             relief="sunken",
-            anchor="w"
+            anchor="w",
+            padding=5,
+            font=('Segoe UI', 9, 'italic')
         ).pack(
+            side="bottom",
             fill="x",
             pady=(8, 0)
         )
+
+        # =====================================================
+        # BOTTOM PANEL
+        # =====================================================
+
+        bottom = ttk.Frame(
+            container
+        )
+
+        bottom.pack(
+            side="top",
+            fill="both",
+            expand=True
+        )
+
+        self.result_panel = (
+            ResultPanel(
+                bottom,
+                service=self.service,
+                on_preview=self._preview
+            )
+        )
+
+        self.result_panel.pack(
+            side="left",
+            fill="y",
+            padx=(0, 10)
+        )
+        
+        self.viewer_frame = ttk.LabelFrame(
+            bottom,
+            text="Riwayat Proses & Viewer",
+            padding=10
+        )
+        self.viewer_frame.pack(
+            side="left",
+            fill="both",
+            expand=True
+        )
+
+        header_frame = ttk.Frame(self.viewer_frame)
+        header_frame.pack(fill="x", pady=(0, 5))
+
+        def clear_log():
+            self.history_text.configure(state='normal')
+            self.history_text.delete('1.0', tk.END)
+            self.history_text.configure(state='disabled')
+
+        ttk.Button(
+            header_frame,
+            text="Bersihkan Log",
+            command=clear_log,
+            padding=2
+        ).pack(side="right")
+        
+        self.history_text = tk.Text(
+            self.viewer_frame,
+            font=('Consolas', 10),
+            bg='#1e1e1e',
+            fg='#d4d4d4',
+            height=10,
+            state='disabled'
+        )
+        self.history_text.pack(fill="both", expand=True)
+
+        # Setup Logger
+        text_handler = TextHandler(self.history_text)
+        text_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s', '%H:%M:%S'))
+        logger = logging.getLogger('pipeline')
+        logger.setLevel(logging.INFO)
+        logger.addHandler(text_handler)
+
+
 
     # =========================================================
     # RUN EXPERIMENT
