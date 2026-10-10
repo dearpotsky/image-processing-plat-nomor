@@ -6,3 +6,6 @@ __pycache__/
 # Folder hasil/output
 output/
 runs/
+dataset/
+models/
+tests/

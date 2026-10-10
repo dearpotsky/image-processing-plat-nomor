@@ -2,8 +2,13 @@ import easyocr
 import numpy as np
 
 class PlateReader:
-    def __init__(self):
-        # Inisialisasi model EasyOCR untuk bahasa Inggris
+    def __init__(self, config=None):
+        # Initialize with OCR configuration (fallback to defaults)
+        if config is None:
+            from app.pipeline.config import OcrConfig
+            config = OcrConfig()
+        self.config = config
+        # Initialize EasyOCR reader (GPU enabled)
         self.reader = easyocr.Reader(['en'], gpu=True)
 
     def read_text(self, image):
@@ -15,9 +20,11 @@ class PlateReader:
         # Gunakan parameter wajar untuk EasyOCR. Karena masalah L hilang ternyata dari cropping YOLO!
         # mag_ratio sedikit di atas default untuk membaca U yang kecil.
         results = self.reader.readtext(
-            image, 
+            image,
             allowlist=allowlist,
-            mag_ratio=1.2
+            text_threshold=self.config.text_threshold,
+            low_text=self.config.low_text,
+            mag_ratio=self.config.mag_ratio
         )
         
         if not results:
