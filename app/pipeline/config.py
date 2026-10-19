@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 
 @dataclass
 class DetectorConfig:
+    enabled: bool = True  # True: Deteksi YOLO + Crop. False: Direct Plate (gambar langsung dianggap plat utuh tanpa pemotongan)
+
     model_path: str = (
         "models/plate_detector/"
         "plate_detector_yolo11n.pt"
@@ -23,6 +25,9 @@ class DetectorConfig:
 
 @dataclass
 class OcrConfig:
+    # Pilihan engine: "easyocr" atau "paddleocr"
+    engine: str = "easyocr"
+
     text_threshold: float = 0.6
     low_text: float = 0.3
     mag_ratio: float = 1.2
@@ -35,6 +40,7 @@ class OcrConfig:
 class PreprocessingConfig:
     enabled: bool = True
 
+    resize: bool = True  # Jika False, mempertahankan resolusi asli agar tidak pecah/blur
     target_width: int = 400
     target_height: int = 120
 

@@ -1,3 +1,8 @@
+import os
+# Harus ada di sini — SEBELUM import apapun yang berkaitan Paddle.
+# PIR executor PaddlePaddle memiliki bug pada ArrayAttribute<DoubleAttribute>.
+os.environ.setdefault("FLAGS_enable_pir_api", "0")
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 import logging
@@ -210,6 +215,17 @@ class MainWindow:
         logger = logging.getLogger('pipeline')
         logger.setLevel(logging.INFO)
         logger.addHandler(text_handler)
+
+        # Auto-load konfigurasi terakhir jika tersedia
+        from app.pipeline.config_utils import load_last_config
+        last_config = load_last_config()
+        if last_config is not None:
+            self.experiment_panel.set_config(last_config)
+            self.experiment_panel.cfg_status_label.configure(
+                text="[Aktif: Terakhir Disimpan]",
+                foreground="#27ae60"
+            )
+            logger.info("Konfigurasi terakhir berhasil dimuat secara otomatis.")
 
 
 

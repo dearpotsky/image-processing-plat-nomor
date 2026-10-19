@@ -112,6 +112,9 @@ class ImageProcessingPipeline:
             interpolation=(
                 preprocessing_config.interpolation
             ),
+            resize=(
+                getattr(preprocessing_config, "resize", True)
+            ),
         )
 
         # ------------------------------------------------
@@ -164,16 +167,26 @@ class ImageProcessingPipeline:
 
         logger = logging.getLogger('pipeline')
         logger.info("-------------------------------------------------")
-        logger.info("Tahap 1: Deteksi Area Plat Nomor menggunakan YOLO")
-        
-        detections = (
-            self.detector.detect(image)
-        )
+        detector_enabled = getattr(self.config.detector, "enabled", True)
 
-        if not detections:
-            logger.info("-> YOLO gagal mendeteksi adanya plat pada gambar.")
+        if not detector_enabled:
+            logger.info("Tahap 1: Deteksi Plat di-BYPASS (Mode Direct Plate / Gambar Plat Langsung)")
+            logger.info("-> Gambar input langsung diproses sebagai plat nomor utuh (tanpa pemotongan YOLO).")
+            h, w = image.shape[:2]
+            detections = [{
+                "box": (0.0, 0.0, float(w), float(h)),
+                "confidence": 1.0,
+            }]
         else:
-            logger.info(f"-> YOLO menemukan {len(detections)} plat.")
+            logger.info("Tahap 1: Deteksi Area Plat Nomor menggunakan YOLO")
+            detections = (
+                self.detector.detect(image)
+            )
+
+            if not detections:
+                logger.info("-> YOLO gagal mendeteksi adanya plat pada gambar.")
+            else:
+                logger.info(f"-> YOLO menemukan {len(detections)} plat.")
 
         # =================================================
         # PROCESS EACH PLATE
@@ -193,11 +206,15 @@ class ImageProcessingPipeline:
             # Crop
             # ---------------------------------------------
 
-            logger.info(f"Plat {index}: Melakukan pemotongan (cropping) gambar pada area deteksi...")
-            crop = self.cropper.crop(
-                image,
-                box,
-            )
+            if not detector_enabled:
+                logger.info(f"Plat {index}: Menggunakan gambar penuh sebagai plat (tanpa crop/pecah)...")
+                crop = image.copy()
+            else:
+                logger.info(f"Plat {index}: Melakukan pemotongan (cropping) gambar pada area deteksi...")
+                crop = self.cropper.crop(
+                    image,
+                    box,
+                )
 
             # ---------------------------------------------
             # Preprocessing
@@ -289,10 +306,18 @@ class ImageProcessingPipeline:
             # OCR
             # ---------------------------------------------
             
-            logger.info(f"Plat {index}: Tahap 5: Ekstraksi Teks (OCR) menggunakan EasyOCR...")
-            # Secara default, jika segmentasi aktif (seperti Otsu + Clear Border),
-            # OCR akan membaca gambar biner hasil akhir. Jika tidak, membaca gambar enhanced.
+            ocr_engine_name = getattr(self.config.ocr, 'engine', 'easyocr').upper()
+            logger.info(f"Plat {index}: Tahap 5: Ekstraksi Teks (OCR) menggunakan {ocr_engine_name}...")
+            # Coba membaca gambar biner hasil segmentasi terlebih dahulu
             plate_text, text_prob = self.reader.read_text(segmented)
+            if not plate_text and enhanced is not None:
+                # Fallback: jika segmented kosong (sering terjadi pada PaddleOCR terhadap citra biner keras),
+                # baca gambar enhanced yang memiliki informasi kontur teks lebih kaya.
+                logger.info(f"Plat {index}: -> Hasil OCR pada biner kosong, mencoba membaca citra enhanced...")
+                fb_text, fb_prob = self.reader.read_text(enhanced)
+                if fb_text:
+                    plate_text, text_prob = fb_text, fb_prob
+
             if plate_text:
                 logger.info(f"Plat {index}: -> Teks plat terbaca: '{plate_text}' (Kepercayaan: {text_prob:.2f})")
             else:

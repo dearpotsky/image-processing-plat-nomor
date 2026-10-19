@@ -135,7 +135,14 @@ class ConfigValidator:
     def _validate_ocr(self, config):
         errors = []
         ocr = config.ocr
-        
+
+        from app.detection.ocr import VALID_OCR_ENGINES
+        if ocr.engine.lower() not in VALID_OCR_ENGINES:
+            errors.append(
+                f"ocr.engine tidak dikenal: '{ocr.engine}'. "
+                f"Pilihan valid: {sorted(VALID_OCR_ENGINES)}"
+            )
+
         if not (0.0 <= ocr.text_threshold <= 1.0):
             errors.append("ocr.text_threshold harus berada pada 0.0 sampai 1.0.")
             

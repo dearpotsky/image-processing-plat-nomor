@@ -1,0 +1,71 @@
+{
+    "detector": {
+        "enabled": true,
+        "model_path": "models/plate_detector/plate_detector_yolo11n.pt",
+        "confidence": 0.25,
+        "padding_v": 0.12,
+        "padding_left": 0.2,
+        "padding_right": 0.2
+    },
+    "ocr": {
+        "engine": "easyocr",
+        "text_threshold": 0.6,
+        "low_text": 0.3,
+        "mag_ratio": 1.2
+    },
+    "preprocessing": {
+        "enabled": true,
+        "resize": false,
+        "target_width": 400,
+        "target_height": 120,
+        "interpolation": "INTER_CUBIC",
+        "grayscale": true,
+        "normalize": true
+    },
+    "enhancement": {
+        "enabled": true,
+        "steps": [
+            {
+                "method": "clahe",
+                "limit": 2.0,
+                "tile_grid_width": 8,
+                "tile_grid_height": 8
+            }
+        ]
+    },
+    "segmentation": {
+        "enabled": true,
+        "steps": [
+            {
+                "method": "otsu",
+                "limit": 0.0
+            }
+        ],
+        "block_size": 11,
+        "c": 2,
+        "invert": false
+    },
+    "feature": {
+        "enabled": true,
+        "connected_components": true,
+        "connectivity": 8,
+        "min_area": 20
+    },
+    "watermark": {
+        "enabled": true
+    },
+    "output": {
+        "base_dir": "output",
+        "save_detection": true,
+        "save_preprocessing": true,
+        "save_enhancement": true,
+        "save_segmentation": true,
+        "save_features": true,
+        "save_watermark": true,
+        "save_csv": true
+    },
+    "experiment": {
+        "name": "proses_02",
+        "save_results": true
+    }
+}

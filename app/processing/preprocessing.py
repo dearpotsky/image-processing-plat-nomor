@@ -8,11 +8,13 @@ class Preprocessor:
         grayscale=True,
         normalize=True,
         interpolation="INTER_CUBIC",  # Diubah ke INTER_CUBIC agar teks scale-up tidak pecah
+        resize=True,
     ):
         self.target_size = target_size
         self.use_grayscale = grayscale
         self.use_normalize = normalize
         self.interpolation = interpolation
+        self.use_resize = resize
 
     def resize(self, image):
         interpolation_method = getattr(
@@ -60,7 +62,10 @@ class Preprocessor:
         )
 
     def process(self, image):
-        result = self.resize(image)
+        if self.use_resize:
+            result = self.resize(image)
+        else:
+            result = image.copy()
 
         if self.use_grayscale:
             result = self.grayscale(result)
