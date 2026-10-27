@@ -26,7 +26,7 @@
         "enabled": true,
         "steps": [
             {
-                "method": "clahe",
+                "method": "histogram_equalization",
                 "limit": 2.0,
                 "tile_grid_width": 8,
                 "tile_grid_height": 8
@@ -37,7 +37,7 @@
         "enabled": true,
         "steps": [
             {
-                "method": "otsu",
+                "method": "none",
                 "limit": 0.0
             }
         ],
